@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 void main() {
-  runApp(MyApp());
+  runApp(const MyApp());
 }
 
 class MyApp extends StatelessWidget {
@@ -14,12 +14,15 @@ class MyApp extends StatelessWidget {
     return ChangeNotifierProvider(
       create: (context) => MyAppState(),
       child: MaterialApp(
-        title: 'Namer App',
+        title: 'Películas Buenas',
+        debugShowCheckedModeBanner: false,
         theme: ThemeData(
           useMaterial3: true,
-          colorScheme: ColorScheme.fromSeed(seedColor: const Color.fromARGB(255, 59, 160, 19)),
+          colorScheme: ColorScheme.fromSeed(
+            seedColor: const Color.fromARGB(255, 59, 160, 19),
+          ),
         ),
-        home: MyHomePage(),
+        home: const MyHomePage(),
       ),
     );
   }
@@ -43,10 +46,11 @@ class MyAppState extends ChangeNotifier {
     }
     notifyListeners();
   }
-
 }
 
 class MyHomePage extends StatefulWidget {
+  const MyHomePage({super.key});
+
   @override
   State<MyHomePage> createState() => _MyHomePageState();
 }
@@ -59,9 +63,12 @@ class _MyHomePageState extends State<MyHomePage> {
     Widget page;
     switch (selectedIndex) {
       case 0:
-        page = GeneratorPage();
+        page = const HomeScreen(); // ← Pantalla de Inicio requerida
         break;
       case 1:
+        page = const GeneratorPage();
+        break;
+      case 2:
         page = FavoritesPage();
         break;
       default:
@@ -76,14 +83,18 @@ class _MyHomePageState extends State<MyHomePage> {
               SafeArea(
                 child: NavigationRail(
                   extended: constraints.maxWidth >= 600,
-                  destinations: [
+                  destinations: const [
                     NavigationRailDestination(
                       icon: Icon(Icons.home),
-                      label: Text('Home'),
+                      label: Text('Inicio'),
+                    ),
+                    NavigationRailDestination(
+                      icon: Icon(Icons.style),
+                      label: Text('Generador'),
                     ),
                     NavigationRailDestination(
                       icon: Icon(Icons.favorite),
-                      label: Text('Favorites'),
+                      label: Text('Favoritos'),
                     ),
                   ],
                   selectedIndex: selectedIndex,
@@ -97,17 +108,89 @@ class _MyHomePageState extends State<MyHomePage> {
               Expanded(
                 child: Container(
                   color: Theme.of(context).colorScheme.primaryContainer,
-                  child: page,  // ← Here.
+                  child: page,
                 ),
               ),
             ],
           ),
         );
-      }
+      },
     );
   }
 }
 
+// ==========================================
+// PANTALLA DE INICIO (HOME SCREEN REQUERIDA)
+// ==========================================
+class HomeScreen extends StatelessWidget {
+  const HomeScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: Stack(
+        children: [
+          // 1. IMAGE: Imagen de fondo
+          Positioned.fill(
+            child: Image.asset(
+              'assets/background.jpg',
+              fit: BoxFit.cover,
+            ),
+          ),
+
+          // Capa oscura de contraste para la legibilidad del texto
+          Positioned.fill(
+            child: Container(
+              color: Colors.black.withOpacity(0.5),
+            ),
+          ),
+
+          // 2. TEXT e ICON: Contenido superpuesto
+          Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                // ICON: Icono decorativo/principal
+                const Icon(
+                  Icons.movie_filter_rounded,
+                  size: 80,
+                  color: Colors.white,
+                ),
+                const SizedBox(height: 20),
+
+                // TEXT: Mensaje de bienvenida "Hello World"
+                const Text(
+                  'Hello World',
+                  style: TextStyle(
+                    fontSize: 38,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
+                    letterSpacing: 1.5,
+                  ),
+                ),
+                const SizedBox(height: 10),
+
+                // TEXT: Nombre de la aplicación
+                const Text(
+                  'Películas Buenas',
+                  style: TextStyle(
+                    fontSize: 22,
+                    color: Colors.white70,
+                    fontWeight: FontWeight.w300,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ==========================================
+// VISTAS EXISTENTES (GENERATOR & FAVORITES)
+// ==========================================
 class GeneratorPage extends StatelessWidget {
   const GeneratorPage({super.key});
 
@@ -121,16 +204,13 @@ class GeneratorPage extends StatelessWidget {
         : Icons.favorite_border;
 
     return Center(
-      // Primer ajuste en CONTAINER
       child: Container(
         constraints: const BoxConstraints(maxWidth: 400),
         padding: const EdgeInsets.all(24.0),
         child: Column(
-          // Segundo ajuste en COLUMN
           mainAxisAlignment: MainAxisAlignment.center,
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            // TEXT: Título principal
             Text(
               'Welcome To Flutter',
               style: Theme.of(context).textTheme.headlineMedium?.copyWith(
@@ -138,8 +218,6 @@ class GeneratorPage extends StatelessWidget {
                   ),
             ),
             const SizedBox(height: 8),
-
-            // TEXT: Subtítulo
             Text(
               'Hola Mundo',
               style: Theme.of(context).textTheme.titleLarge?.copyWith(
@@ -147,15 +225,10 @@ class GeneratorPage extends StatelessWidget {
                   ),
             ),
             const SizedBox(height: 32),
-
-            // Tercer ajuste en STACK
             Stack(
               alignment: Alignment.topRight,
               children: [
-                // Elemento base del Stack
                 BigCard(pair: pair),
-
-                // Elemento superpuesto en la esquina superior derecha
                 if (appState.favorites.contains(pair))
                   Positioned(
                     top: 8,
@@ -176,8 +249,6 @@ class GeneratorPage extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 24),
-
-            // Cuarto Ajuste en ROW
             Row(
               mainAxisAlignment: MainAxisAlignment.center,
               mainAxisSize: MainAxisSize.max,
@@ -236,12 +307,14 @@ class BigCard extends StatelessWidget {
 }
 
 class FavoritesPage extends StatelessWidget {
+  const FavoritesPage({super.key});
+
   @override
   Widget build(BuildContext context) {
     var appState = context.watch<MyAppState>();
 
     if (appState.favorites.isEmpty) {
-      return Center(child: Text('No favorites yet.'));
+      return const Center(child: Text('No favorites yet.'));
     }
 
     return ListView(
@@ -255,7 +328,7 @@ class FavoritesPage extends StatelessWidget {
         ),
         for (var pair in appState.favorites)
           ListTile(
-            leading: Icon(Icons.favorite),
+            leading: const Icon(Icons.favorite),
             title: Text(pair.asLowerCase),
           ),
       ],
