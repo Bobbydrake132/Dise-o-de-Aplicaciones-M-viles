@@ -1,5 +1,7 @@
+import 'dart:convert';
 import 'package:english_words/english_words.dart';
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
 import 'package:provider/provider.dart';
 
 void main() {
@@ -63,13 +65,16 @@ class _MyHomePageState extends State<MyHomePage> {
     Widget page;
     switch (selectedIndex) {
       case 0:
-        page = const HomeScreen(); // ← Pantalla de Inicio requerida
+        page = const HomeScreen();
         break;
       case 1:
-        page = const GeneratorPage();
+        page = const WeatherPage(); // ← Pestaña de Petición HTTP (Clima)
         break;
       case 2:
-        page = FavoritesPage();
+        page = const GeneratorPage();
+        break;
+      case 3:
+        page = const FavoritesPage();
         break;
       default:
         throw UnimplementedError('no widget for $selectedIndex');
@@ -87,6 +92,10 @@ class _MyHomePageState extends State<MyHomePage> {
                     NavigationRailDestination(
                       icon: Icon(Icons.home),
                       label: Text('Inicio'),
+                    ),
+                    NavigationRailDestination(
+                      icon: Icon(Icons.wb_sunny),
+                      label: Text('Clima'),
                     ),
                     NavigationRailDestination(
                       icon: Icon(Icons.style),
@@ -120,8 +129,147 @@ class _MyHomePageState extends State<MyHomePage> {
 }
 
 // ==========================================
-// PANTALLA DE INICIO (HOME SCREEN REQUERIDA)
+// 1. PETICIÓN HTTP Y PRONÓSTICO DEL CLIMA
 // ==========================================
+
+class WeatherInfo {
+  final String city;
+  final double temp;
+  final String description;
+
+  WeatherInfo({
+    required this.city,
+    required this.temp,
+    required this.description,
+  });
+
+  factory WeatherInfo.fromJson(Map<String, dynamic> json) {
+    return WeatherInfo(
+      city: json['name'] ?? '',
+      temp: (json['main']['temp'] as num).toDouble(),
+      description: json['weather'][0]['description'] ?? '',
+    );
+  }
+}
+
+Future<WeatherInfo> fetchWeather() async {
+  const apiKey = 'a4d1212b0dd6d5fde6f3b4f4a9b5f1d5';
+  const city = 'Guadalajara';
+  final url = Uri.parse(
+    'https://api.openweathermap.org/data/2.5/weather?q=$city&appid=$apiKey&units=metric&lang=es',
+  );
+
+  final response = await http.get(url);
+
+  if (response.statusCode == 200) {
+    return WeatherInfo.fromJson(jsonDecode(response.body));
+  } else {
+    throw Exception('Error al cargar clima (${response.statusCode})');
+  }
+}
+
+class WeatherPage extends StatefulWidget {
+  const WeatherPage({super.key});
+
+  @override
+  State<WeatherPage> createState() => _WeatherPageState();
+}
+
+class _WeatherPageState extends State<WeatherPage> {
+  late Future<WeatherInfo> futureWeather;
+
+  @override
+  void initState() {
+    super.initState();
+    futureWeather = fetchWeather();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Container(
+        constraints: const BoxConstraints(maxWidth: 350),
+        padding: const EdgeInsets.all(24.0),
+        child: Card(
+          elevation: 4,
+          child: Padding(
+            padding: const EdgeInsets.all(24.0),
+            child: FutureBuilder<WeatherInfo>(
+              future: futureWeather,
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      CircularProgressIndicator(),
+                      SizedBox(height: 16),
+                      Text('Consultando clima local...'),
+                    ],
+                  );
+                } else if (snapshot.hasError) {
+                  return Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.cloud_off, size: 48, color: Colors.red),
+                      const SizedBox(height: 12),
+                      Text(
+                        '${snapshot.error}',
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(color: Colors.red),
+                      ),
+                      const SizedBox(height: 12),
+                      ElevatedButton(
+                        onPressed: () {
+                          setState(() {
+                            futureWeather = fetchWeather();
+                          });
+                        },
+                        child: const Text('Reintentar'),
+                      ),
+                    ],
+                  );
+                } else if (snapshot.hasData) {
+                  final weather = snapshot.data!;
+                  return Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.cloud, size: 64, color: Colors.lightBlue),
+                      const SizedBox(height: 12),
+                      Text(
+                        weather.city,
+                        style: Theme.of(context).textTheme.headlineSmall,
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        '${weather.temp.toStringAsFixed(1)} °C',
+                        style: Theme.of(context).textTheme.displaySmall?.copyWith(
+                              fontWeight: FontWeight.bold,
+                            ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        weather.description.toUpperCase(),
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                              color: Colors.grey[700],
+                            ),
+                      ),
+                    ],
+                  );
+                }
+                return const Text('Sin datos');
+              },
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ==========================================
+// 2. PANTALLA DE INICIO (HOME SCREEN)
+// ==========================================
+
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
 
@@ -130,35 +278,30 @@ class HomeScreen extends StatelessWidget {
     return Scaffold(
       body: Stack(
         children: [
-          // 1. IMAGE: Imagen de fondo
           Positioned.fill(
             child: Image.asset(
               'assets/background.jpg',
               fit: BoxFit.cover,
+              errorBuilder: (context, error, stackTrace) {
+                return Container(color: Colors.blueGrey);
+              },
             ),
           ),
-
-          // Capa oscura de contraste para la legibilidad del texto
           Positioned.fill(
             child: Container(
               color: Colors.black.withOpacity(0.5),
             ),
           ),
-
-          // 2. TEXT e ICON: Contenido superpuesto
           Center(
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                // ICON: Icono decorativo/principal
                 const Icon(
                   Icons.movie_filter_rounded,
                   size: 80,
                   color: Colors.white,
                 ),
                 const SizedBox(height: 20),
-
-                // TEXT: Mensaje de bienvenida "Hello World"
                 const Text(
                   'Hello World',
                   style: TextStyle(
@@ -169,8 +312,6 @@ class HomeScreen extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 10),
-
-                // TEXT: Nombre de la aplicación
                 const Text(
                   'Películas Buenas',
                   style: TextStyle(
@@ -189,8 +330,9 @@ class HomeScreen extends StatelessWidget {
 }
 
 // ==========================================
-// VISTAS EXISTENTES (GENERATOR & FAVORITES)
+// 3. GENERADOR Y FAVORITOS (VISTAS EXISTENTES)
 // ==========================================
+
 class GeneratorPage extends StatelessWidget {
   const GeneratorPage({super.key});
 
@@ -322,8 +464,7 @@ class FavoritesPage extends StatelessWidget {
         Padding(
           padding: const EdgeInsets.all(20),
           child: Text(
-            'You have '
-            '${appState.favorites.length} favorites:',
+            'You have ${appState.favorites.length} favorites:',
           ),
         ),
         for (var pair in appState.favorites)
