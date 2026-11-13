@@ -1,10 +1,17 @@
 import 'dart:convert';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:english_words/english_words.dart';
+import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:provider/provider.dart';
+import 'firebase_options.dart';
 
-void main() {
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await Firebase.initializeApp(
+    options: DefaultFirebaseOptions.currentPlatform,
+  );
   runApp(const MyApp());
 }
 
@@ -68,12 +75,15 @@ class _MyHomePageState extends State<MyHomePage> {
         page = const HomeScreen();
         break;
       case 1:
-        page = const WeatherPage(); // ← Pestaña de Petición HTTP (Clima)
+        page = const MoviesDatabasePage(); // Pestaña de Firebase Firestore
         break;
       case 2:
-        page = const GeneratorPage();
+        page = const WeatherPage(); // Pestaña de Peticion HTTP del Clima
         break;
       case 3:
+        page = const GeneratorPage();
+        break;
+      case 4:
         page = const FavoritesPage();
         break;
       default:
@@ -92,6 +102,10 @@ class _MyHomePageState extends State<MyHomePage> {
                     NavigationRailDestination(
                       icon: Icon(Icons.home),
                       label: Text('Inicio'),
+                    ),
+                    NavigationRailDestination(
+                      icon: Icon(Icons.cloud_upload),
+                      label: Text('Base de Datos'),
                     ),
                     NavigationRailDestination(
                       icon: Icon(Icons.wb_sunny),
@@ -128,9 +142,157 @@ class _MyHomePageState extends State<MyHomePage> {
   }
 }
 
-// ==========================================
-// 1. PETICIÓN HTTP Y PRONÓSTICO DEL CLIMA
-// ==========================================
+//INTEGRACION CON FIREBASE FIRESTORE
+
+class MoviesDatabasePage extends StatefulWidget {
+  const MoviesDatabasePage({super.key});
+
+  @override
+  State<MoviesDatabasePage> createState() => _MoviesDatabasePageState();
+}
+
+class _MoviesDatabasePageState extends State<MoviesDatabasePage> {
+  final TextEditingController _titleController = TextEditingController();
+  final TextEditingController _genreController = TextEditingController();
+  bool _isSaving = false;
+
+  final CollectionReference _moviesCollection =
+      FirebaseFirestore.instance.collection('peliculas');
+
+  Future<void> _addMovieToFirebase() async {
+    final title = _titleController.text.trim();
+    final genre = _genreController.text.trim();
+
+    if (title.isEmpty || genre.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Por favor completa ambos campos')),
+      );
+      return;
+    }
+
+    setState(() => _isSaving = true);
+
+    try {
+      await _moviesCollection.add({
+        'titulo': title,
+        'genero': genre,
+        'fecha_registro': FieldValue.serverTimestamp(),
+      });
+
+      _titleController.clear();
+      _genreController.clear();
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('¡Película guardada en Firebase!')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error al guardar: $e')),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isSaving = false);
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    _titleController.dispose();
+    _genreController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.all(24.0),
+      child: Column(
+        children: [
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text(
+                    'Agregar Película a Firebase',
+                    style: Theme.of(context).textTheme.titleLarge,
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: _titleController,
+                    decoration: const InputDecoration(
+                      labelText: 'Título de la película',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: _genreController,
+                    decoration: const InputDecoration(
+                      labelText: 'Género (ej. Acción, Ciencia Ficción)',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  ElevatedButton.icon(
+                    onPressed: _isSaving ? null : _addMovieToFirebase,
+                    icon: const Icon(Icons.save),
+                    label: Text(_isSaving ? 'Guardando...' : 'Guardar en Firebase'),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 20),
+          Expanded(
+            child: StreamBuilder<QuerySnapshot>(
+              stream: _moviesCollection
+                  .orderBy('fecha_registro', descending: true)
+                  .snapshots(),
+              builder: (context, snapshot) {
+                if (snapshot.hasError) {
+                  return Center(child: Text('Error: ${snapshot.error}'));
+                }
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const Center(child: CircularProgressIndicator());
+                }
+
+                final docs = snapshot.data?.docs ?? [];
+                if (docs.isEmpty) {
+                  return const Center(
+                    child: Text('Aún no hay películas registradas en Firebase.'),
+                  );
+                }
+
+                return ListView.builder(
+                  itemCount: docs.length,
+                  itemBuilder: (context, index) {
+                    final data = docs[index].data() as Map<String, dynamic>;
+                    return Card(
+                      child: ListTile(
+                        leading: const Icon(Icons.movie),
+                        title: Text(data['titulo'] ?? 'Sin título'),
+                        subtitle: Text('Género: ${data['genero'] ?? 'N/A'}'),
+                      ),
+                    );
+                  },
+                );
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// PETICION HTTP Y PRONOSTICO DEL CLIMA
 
 class WeatherInfo {
   final String city;
@@ -266,9 +428,7 @@ class _WeatherPageState extends State<WeatherPage> {
   }
 }
 
-// ==========================================
-// 2. PANTALLA DE INICIO (HOME SCREEN)
-// ==========================================
+// PANTALLA DE INICIO, GENERADOR Y FAVORITOS
 
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
@@ -328,10 +488,6 @@ class HomeScreen extends StatelessWidget {
     );
   }
 }
-
-// ==========================================
-// 3. GENERADOR Y FAVORITOS (VISTAS EXISTENTES)
-// ==========================================
 
 class GeneratorPage extends StatelessWidget {
   const GeneratorPage({super.key});
